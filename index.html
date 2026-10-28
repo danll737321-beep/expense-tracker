@@ -130,7 +130,36 @@ label.lbl{font-size:.75rem;color:var(--muted);letter-spacing:.08em;display:block
     <button id="restoreBtn">匯入備份</button>
     <input type="file" id="restore" accept=".json,application/json" hidden>
   </div>
+
+  <details class="panel settings" id="settings">
+    <summary>雲端同步設定（Google Sheets）</summary>
+    <div class="sgrid">
+      <label class="lbl" for="sUrl">Apps Script 網址（結尾是 /exec）</label>
+      <input id="sUrl" placeholder="https://script.google.com/macros/s/…/exec" spellcheck="false">
+      <label class="lbl" for="sToken">密鑰（執行 setup 後在記錄裡看到的那串）</label>
+      <input id="sToken" placeholder="貼上密鑰" spellcheck="false">
+      <label class="lbl" for="sName">記錄人（選填，例如 Daniel）</label>
+      <input id="sName" placeholder="這台裝置是誰在記" maxlength="20">
+      <div class="sbtns">
+        <button type="button" id="sSave" class="submit">儲存並同步</button>
+        <button type="button" id="sClear" class="ghost">中斷連線</button>
+      </div>
+      <div class="msg" id="sMsg"></div>
+    </div>
+  </details>
 </div>
+
+<style>
+.settings summary{cursor:pointer;font-size:.85rem;color:var(--muted)}
+.settings[open] summary{margin-bottom:12px;color:var(--fg)}
+.sgrid{display:flex;flex-direction:column;gap:6px}
+.sgrid input{font:inherit;font-size:.85rem;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;width:100%;min-width:0;margin-bottom:6px}
+.sbtns{display:flex;gap:8px;flex-wrap:wrap}
+.sbtns .submit{margin-top:0;flex:1;letter-spacing:.1em}
+.ghost{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:10px;padding:12px 14px;font:inherit;cursor:pointer}
+.sync.ok{color:var(--c-move)} .sync.warn{color:var(--c-edu)} .sync.err{color:var(--danger)}
+.item .pend{color:var(--c-edu)}
+</style>
 
 <script>
 const CATS=[
@@ -145,13 +174,21 @@ const $=id=>document.getElementById(id);
 const fmt=n=>"$"+n.toLocaleString("en-US",{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2});
 const pad=n=>String(n).padStart(2,"0");
 const today=()=>{const d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())};
+const newId=()=>"e"+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 
-let items=[];          // {id,amount,cat,date,note,ts}
+// items: {id,amount,cat,date,note,by,ts,_dirty?}
+let items=[], delQueue=[], cfg={url:"",token:"",name:""};
 let selCat=null, filterCat=null, pendingDel=null;
 let view=new Date(); view.setDate(1);
-let col=null, local=false, downloads=null;
 
-// ---- category chips
+// ---------- local storage
+const LS={items:"ledger6",del:"ledger6_del",cfg:"ledger6_cfg"};
+function lsGet(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}
+function saveLocal(){lsSet(LS.items,items);lsSet(LS.del,delQueue)}
+items=lsGet(LS.items,[]); delQueue=lsGet(LS.del,[]); cfg=Object.assign(cfg,lsGet(LS.cfg,{}));
+
+// ---------- category chips + form
 $("cats").innerHTML=CATS.map(c=>`<button type="button" class="cat" data-k="${c.k}" aria-pressed="false" style="--k:var(${c.c})"><b>${c.g}</b><small>${c.n}</small></button>`).join("");
 $("cats").addEventListener("click",e=>{const b=e.target.closest(".cat");if(!b)return;selCat=b.dataset.k;
   document.querySelectorAll(".cat").forEach(x=>x.setAttribute("aria-pressed",x===b));validate()});
@@ -160,26 +197,25 @@ const parseAmt=()=>{const v=parseFloat($("amt").value.replace(/[^0-9.]/g,""));re
 function validate(){$("submit").disabled=!(parseAmt()&&selCat&&$("date").value)}
 $("amt").addEventListener("input",validate);$("date").addEventListener("input",validate);
 
-$("form").addEventListener("submit",async e=>{
+$("form").addEventListener("submit",e=>{
   e.preventDefault(); const amount=parseAmt(); if(!amount||!selCat)return;
-  const rec={amount,cat:selCat,date:$("date").value,note:$("note").value.trim(),ts:Date.now()};
-  $("submit").disabled=true;
-  try{
-    if(col){await col.add(rec)}else{rec.id="l"+rec.ts;items.push(rec);saveLocal();render()}
-    $("msg").textContent=`已記錄 ${CAT[rec.cat].g} ${fmt(amount)}`;
-    $("amt").value="";$("note").value="";
-    const d=new Date(rec.date+"T00:00");if(d.getMonth()!==view.getMonth()||d.getFullYear()!==view.getFullYear()){view=new Date(d.getFullYear(),d.getMonth(),1);render()}
-  }catch(err){$("msg").textContent=err&&err.code==="quota_exceeded"?"儲存空間已滿，請刪除舊紀錄後再試。":"沒有存到，請檢查網路後再按一次。"}
-  validate(); $("amt").focus();
+  const rec={id:newId(),amount,cat:selCat,date:$("date").value,note:$("note").value.trim(),by:cfg.name||"",ts:Date.now(),_dirty:true};
+  items.push(rec); saveLocal();
+  $("msg").textContent=`已記錄 ${CAT[rec.cat].g} ${fmt(amount)}`;
+  $("amt").value="";$("note").value="";
+  const d=new Date(rec.date+"T00:00");
+  if(d.getMonth()!==view.getMonth()||d.getFullYear()!==view.getFullYear())view=new Date(d.getFullYear(),d.getMonth(),1);
+  render(); validate(); $("amt").focus(); sync();
 });
 
-// ---- month nav
+// ---------- month nav / filter
 $("prev").onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()-1,1);filterCat=null;render()};
 $("next").onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()+1,1);filterCat=null;render()};
 $("clearFilter").onclick=()=>{filterCat=null;render()};
 $("bars").addEventListener("click",e=>{const b=e.target.closest(".bar");if(!b)return;filterCat=filterCat===b.dataset.k?null:b.dataset.k;render()});
 
 function monthItems(){const key=view.getFullYear()+"-"+pad(view.getMonth()+1);return items.filter(i=>i.date&&i.date.startsWith(key))}
+function esc(s){return String(s||"").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]))}
 
 function render(){
   $("ym").textContent=`${view.getFullYear()} 年 ${view.getMonth()+1} 月`;
@@ -194,51 +230,109 @@ function render(){
   $("filterNote").hidden=!filterCat;
   if(filterCat)$("filterText").textContent=`只看「${CAT[filterCat].g}・${CAT[filterCat].n}」`;
   const shown=m.filter(i=>!filterCat||i.cat===filterCat).sort((a,b)=>b.date.localeCompare(a.date)||b.ts-a.ts);
-  $("csv").hidden=!(downloads&&m.length);
+  $("csv").hidden=!m.length;
   if(!shown.length){
     $("list").innerHTML=`<div class="empty"><b>${filterCat?CAT[filterCat].g:"食衣住行育樂"}</b>${items.length?"這個月還沒有紀錄。":"還沒有任何紀錄。在上面輸入金額、選一個分類，按「記一筆」就開始。"}</div>`;return}
   const byDay={}; shown.forEach(i=>(byDay[i.date]=byDay[i.date]||[]).push(i));
   const wk="日一二三四五六";
   $("list").innerHTML=Object.keys(byDay).map(d=>{const dt=new Date(d+"T00:00"),ds=byDay[d].reduce((s,i)=>s+i.amount,0);
     return `<div class="day"><div class="dayhead"><span>${dt.getMonth()+1}/${dt.getDate()}（${wk[dt.getDay()]}）</span><span class="num">${fmt(ds)}</span></div>`+
-    byDay[d].map(i=>{const c=CAT[i.cat]||CATS[0];return `<div class="item" style="--k:var(${c.c})"><div class="g">${c.g}</div>
-      <div class="note">${esc(i.note)||c.n}<small>${c.n}</small></div><span class="num">${fmt(i.amount)}</span>
-      <button class="del${pendingDel===i.id?" confirm":""}" data-id="${i.id}">${pendingDel===i.id?"確定刪除":"刪除"}</button></div>`}).join("")+`</div>`}).join("");
+    byDay[d].map(i=>{const c=CAT[i.cat]||CATS[0];
+      const sub=[c.n,i.by?esc(i.by):"",(i._dirty&&cfg.url)?'<span class="pend">待上傳</span>':""].filter(Boolean).join(" · ");
+      return `<div class="item" style="--k:var(${c.c})"><div class="g">${c.g}</div>
+      <div class="note">${esc(i.note)||c.n}<small>${sub}</small></div><span class="num">${fmt(i.amount)}</span>
+      <button class="del${pendingDel===i.id?" confirm":""}" data-id="${esc(i.id)}">${pendingDel===i.id?"確定刪除":"刪除"}</button></div>`}).join("")+`</div>`}).join("");
 }
-function esc(s){return (s||"").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]))}
 
-$("list").addEventListener("click",async e=>{const b=e.target.closest(".del");if(!b)return;const id=b.dataset.id;
+$("list").addEventListener("click",e=>{const b=e.target.closest(".del");if(!b)return;const id=b.dataset.id;
   if(pendingDel!==id){pendingDel=id;render();setTimeout(()=>{if(pendingDel===id){pendingDel=null;render()}},3000);return}
   pendingDel=null;
-  try{if(col){await col.doc(id).delete()}else{items=items.filter(i=>i.id!==id);saveLocal();render()}}catch{$("msg").textContent="刪除失敗，請再試一次。"}
+  const it=items.find(i=>i.id===id);
+  items=items.filter(i=>i.id!==id);
+  if(it&&cfg.url&&!delQueue.includes(id))delQueue.push(id);   // removing an id the sheet never had is harmless
+  saveLocal();render();sync();
 });
 
-$("csv").onclick=async()=>{const m=monthItems().sort((a,b)=>a.date.localeCompare(b.date));
-  const rows=[["日期","分類","類別","金額","備註"],...m.map(i=>[i.date,CAT[i.cat].g,CAT[i.cat].n,i.amount,i.note])];
+// ---------- export / backup
+$("csv").onclick=()=>{const m=monthItems().sort((a,b)=>a.date.localeCompare(b.date));
+  const rows=[["日期","分類","類別","金額","備註","記錄人"],...m.map(i=>[i.date,CAT[i.cat].g,CAT[i.cat].n,i.amount,i.note,i.by||""])];
   const csv="﻿"+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
   saveFile(`expenses-${view.getFullYear()}-${pad(view.getMonth()+1)}.csv`,new Blob([csv],{type:"text/csv"}))};
-
 function saveFile(name,blob){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-
-$("backup").onclick=()=>saveFile(`expenses-backup-${today()}.json`,new Blob([JSON.stringify(items,null,1)],{type:"application/json"}));
+$("backup").onclick=()=>saveFile(`expenses-backup-${today()}.json`,
+  new Blob([JSON.stringify(items.map(({_dirty,...r})=>r),null,1)],{type:"application/json"}));
 $("restoreBtn").onclick=()=>$("restore").click();
 $("restore").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;
   try{const data=JSON.parse(await f.text());if(!Array.isArray(data))throw 0;
     const ids=new Set(items.map(i=>i.id));let added=0;
-    data.forEach(r=>{if(r&&r.id&&!ids.has(r.id)&&CAT[r.cat]&&+r.amount>0&&/^\d{4}-\d{2}-\d{2}$/.test(r.date)){
-      items.push({id:String(r.id),amount:+r.amount,cat:r.cat,date:r.date,note:String(r.note||""),ts:+r.ts||Date.now()});ids.add(r.id);added++}});
-    saveLocal();render();$("msg").textContent=`已匯入 ${added} 筆（重複的已略過）`}
+    data.forEach(r=>{const x=clean(r);if(x&&!ids.has(x.id)){x._dirty=true;items.push(x);ids.add(x.id);added++}});
+    saveLocal();render();sync();$("msg").textContent=`已匯入 ${added} 筆（重複的已略過）`}
   catch{$("msg").textContent="這個檔案不是帳本備份，請選擇「備份全部」匯出的 JSON。"}
   e.target.value=""});
+function clean(r){
+  if(!r||!r.id||!CAT[r.cat]||!(+r.amount>0)||!/^\d{4}-\d{2}-\d{2}$/.test(String(r.date)))return null;
+  return {id:String(r.id),amount:Math.round(+r.amount*100)/100,cat:r.cat,date:String(r.date),note:String(r.note||""),by:String(r.by||""),ts:+r.ts||Date.now()};
+}
 
-// ---- storage
-function loadLocal(){try{items=JSON.parse(localStorage.getItem("ledger6")||"[]")}catch{items=[]}}
-function saveLocal(){try{localStorage.setItem("ledger6",JSON.stringify(items))}catch{}}
+// ---------- cloud sync (Google Apps Script web app)
+const status=(t,cls)=>{const s=$("sync");s.textContent=t;s.className="sync"+(cls?" "+cls:"")};
+let syncing=false, again=false;
 
-downloads=true; local=true; loadLocal();
-$("sync").textContent="資料存在此裝置";
-render();
+async function api(body){
+  const r=await fetch(cfg.url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body:JSON.stringify(Object.assign({token:cfg.token},body))});
+  if(!r.ok)throw new Error("http "+r.status);
+  const j=await r.json(); if(!j.ok)throw new Error(j.error||"server");
+  return j;
+}
+
+async function sync(){
+  if(!cfg.url||!cfg.token){status(items.length?"只存在這台裝置":"尚未設定雲端","warn");return}
+  if(syncing){again=true;return}
+  if(!navigator.onLine){const n=items.filter(i=>i._dirty).length+delQueue.length;status(`離線中${n?`，${n} 筆待上傳`:""}`,"warn");return}
+  syncing=true; status("同步中…");
+  try{
+    const up=items.filter(i=>i._dirty).map(({_dirty,...r})=>r), del=[...delQueue];
+    const j=await api({action:"sync",upsert:up,remove:del});
+    const sentIds=new Set(up.map(r=>r.id));
+    delQueue=delQueue.filter(id=>!del.includes(id));
+    // server list is the truth; keep local rows edited after the request went out
+    const stillDirty=items.filter(i=>i._dirty&&!sentIds.has(i.id));
+    const server=(j.items||[]).map(clean).filter(Boolean).filter(r=>!delQueue.includes(r.id));
+    const seen=new Set(server.map(r=>r.id));
+    items=[...server,...stillDirty.filter(i=>!seen.has(i.id))];
+    saveLocal(); render();
+    const t=new Date(); status(`已同步 ${pad(t.getHours())}:${pad(t.getMinutes())}`,"ok");
+  }catch(err){
+    const msg=String(err.message||err);
+    status(msg==="bad_token"?"密鑰不對，請檢查設定":"同步失敗，稍後會再試","err");
+    if(msg==="bad_token")$("settings").open=true;
+  }finally{syncing=false; if(again){again=false;sync()}}
+}
+
+// ---------- settings
+$("sUrl").value=cfg.url; $("sToken").value=cfg.token; $("sName").value=cfg.name;
+if(!cfg.url)$("settings").open=true;
+$("sSave").onclick=async()=>{
+  const url=$("sUrl").value.trim(), token=$("sToken").value.trim();
+  if(url&&!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(url)){$("sMsg").textContent="網址格式不對：要是 https://script.google.com/macros/s/…/exec";return}
+  if(url&&!token){$("sMsg").textContent="請貼上密鑰。";return}
+  const first=!cfg.url&&url;
+  cfg={url,token,name:$("sName").value.trim()}; lsSet(LS.cfg,cfg);
+  if(first)items.forEach(i=>i._dirty=true);   // upload what this device already has
+  saveLocal(); $("sMsg").textContent=url?"已儲存，正在同步…":"已儲存。"; await sync();
+  if($("sync").classList.contains("ok"))$("sMsg").textContent="連線成功。";
+};
+$("sClear").onclick=()=>{cfg={url:"",token:"",name:cfg.name};lsSet(LS.cfg,cfg);$("sUrl").value="";$("sToken").value="";
+  $("sMsg").textContent="已中斷，資料保留在這台裝置。";sync()};
+
+// ---------- triggers
+addEventListener("online",sync);
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")sync()});
+setInterval(()=>{if(document.visibilityState==="visible")sync()},60000);
+
+render(); sync();
 </script>
 </body>
 </html>
