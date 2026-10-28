@@ -1,803 +1,244 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="zh-Hant">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
-<title>Ledger — Shared Expenses</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>食衣住行育樂帳本</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Ledger">
-<meta name="theme-color" content="#3E9B72">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="帳本">
+<meta name="theme-color" content="#2f5d50">
 <link rel="apple-touch-icon" href="icon-180.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;900&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
 <style>
-  :root{
-    --paper:#FAF7F0;
-    --paper-line:#E7E1D0;
-    --ink:#2A2620;
-    --ink-soft:#8A8271;
-    --gold:#3E9B72;
-    --gold-deep:#2E7A57;
-    --gold-wash:#E4F2EA;
-    --teal:#2A6F6F;
-    --teal-deep:#1D4F4F;
-    --rust:#D8654A;
-    --rust-wash:#FBE9E3;
-    --card:#FFFFFF;
-    --key:#F5F2E8;
-    --shadow:0 1px 2px rgba(42,38,32,0.04), 0 6px 16px rgba(42,38,32,0.06);
-    --shadow-lg:0 4px 10px rgba(42,38,32,0.08), 0 16px 34px rgba(42,38,32,0.12);
-  }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  html{height:100%;}
-  html,body{margin:0;padding:0;overscroll-behavior-y:none;}
-  body{
-    background:var(--paper);
-    color:var(--ink);
-    font-family:'Inter',sans-serif;
-    -webkit-font-smoothing:antialiased;
-    padding-bottom:calc(30px + env(safe-area-inset-bottom));
-    min-height:100dvh;
-  }
-  .wrap{max-width:640px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top)) 16px 32px;}
-  button{-webkit-appearance:none;touch-action:manipulation;font-family:inherit;}
-  input{font-family:inherit;}
-  ::selection{background:var(--teal);color:#fff;}
-
-  /* ── Header ── */
-  header.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
-  .brand{display:flex;align-items:center;gap:11px;}
-  .brand-mark{
-    width:36px;height:36px;border-radius:10px;
-    background:linear-gradient(155deg, var(--gold) 0%, var(--gold-deep) 100%);
-    display:flex;align-items:center;justify-content:center;
-    box-shadow:var(--shadow);flex-shrink:0;
-  }
-  .brand-mark svg{width:19px;height:19px;}
-  .brand-text h1{font-family:'Fraunces',serif;font-weight:600;font-size:20px;margin:0;letter-spacing:-0.01em;line-height:1.1;}
-  .brand-text p{margin:1px 0 0;font-size:11.5px;color:var(--ink-soft);}
-  .user-chip{
-    font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--teal-deep);
-    background:var(--card);border:1px solid var(--paper-line);border-radius:20px;
-    padding:9px 14px;min-height:36px;cursor:pointer;white-space:nowrap;box-shadow:var(--shadow);
-  }
-
-  /* ── Summary strip ── */
-  .summary-strip{
-    display:flex;align-items:center;justify-content:space-between;
-    background:linear-gradient(155deg, var(--gold-wash) 0%, #D8EEE1 100%);
-    border-radius:14px;padding:13px 16px;margin-bottom:14px;box-shadow:var(--shadow);
-  }
-  .summary-strip .figure{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:18px;color:var(--teal-deep);}
-  .summary-strip .figure-label{font-size:11.5px;color:#5E8C77;margin-top:1px;}
-  .delta-badge{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;padding:4px 9px;border-radius:20px;}
-  .delta-up{background:var(--rust-wash);color:var(--rust);}
-  .delta-down{background:#E4EFE2;color:#4A7A45;}
-
-  /* ── Segmented tabs ── */
-  .tabs{display:flex;gap:2px;background:#EFE9D8;border-radius:12px;padding:3px;margin-bottom:16px;position:sticky;top:0;z-index:5;}
-  .tab{flex:1;font-size:14px;font-weight:600;color:var(--ink-soft);background:none;border:none;border-radius:9px;padding:9px 4px;min-height:40px;cursor:pointer;}
-  .tab.active{color:var(--ink);background:#fff;box-shadow:var(--shadow);}
-
-  section.view{display:none;}
-  section.view.active{display:block;animation:fadein 0.18s ease;}
-  @keyframes fadein{from{opacity:0;transform:translateY(3px);}to{opacity:1;transform:none;}}
-
-  /* ── Category grid ── */
-  .cat-card{background:none;padding:4px 2px 6px;margin-bottom:4px;}
-  .cat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px 6px;}
-  .cat-tile{
-    display:flex;flex-direction:column;align-items:center;gap:6px;
-    background:none;border:none;cursor:pointer;padding:0;
-  }
-  .cat-tile .sq{
-    width:52px;height:52px;border-radius:15px;
-    display:flex;align-items:center;justify-content:center;
-    box-shadow:var(--shadow);position:relative;
-  }
-  .cat-tile .sq svg{width:24px;height:24px;}
-  .cat-tile .lb{font-size:11px;font-weight:500;color:var(--ink-soft);}
-  .cat-tile.active .sq{box-shadow:0 0 0 2.5px #fff, 0 0 0 4.5px var(--ink), var(--shadow);}
-  .cat-tile.active .lb{color:var(--ink);font-weight:600;}
-  .cat-tile .check{
-    position:absolute;top:-4px;right:-4px;width:17px;height:17px;border-radius:50%;
-    background:var(--ink);display:flex;align-items:center;justify-content:center;
-    opacity:0;transform:scale(0.6);transition:opacity 0.12s, transform 0.12s;
-  }
-  .cat-tile .check svg{width:10px;height:10px;}
-  .cat-tile.active .check{opacity:1;transform:scale(1);}
-
-  /* ── Preview row ── */
-  .preview-row{
-    display:flex;align-items:center;gap:10px;background:var(--card);
-    border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:var(--shadow);
-  }
-  .preview-icon{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-  .preview-icon svg{width:18px;height:18px;}
-  .preview-mid{flex:1;min-width:0;}
-  .preview-cat{font-size:13.5px;font-weight:600;}
-  .preview-note-input{
-    border:none;background:none;font-size:12px;color:var(--ink-soft);width:100%;padding:1px 0;
-  }
-  .preview-note-input:focus{outline:none;color:var(--ink);}
-  .preview-amount{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:17px;color:var(--ink);flex-shrink:0;}
-
-  /* ── Date nav ── */
-  .date-nav{display:flex;align-items:center;gap:8px;background:var(--card);border-radius:14px;padding:8px 8px;margin-bottom:12px;box-shadow:var(--shadow);}
-  .date-nav button.arrow{
-    width:38px;height:38px;border:none;background:var(--key);border-radius:10px;
-    display:flex;align-items:center;justify-content:center;color:var(--ink-soft);cursor:pointer;flex-shrink:0;
-  }
-  .date-nav .date-label{flex:1;text-align:center;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;}
-  .date-nav .date-label svg{width:15px;height:15px;color:var(--ink-soft);}
-  .date-nav input[type=date]{position:absolute;opacity:0;pointer-events:none;width:0;height:0;}
-
-  /* ── Keypad ── */
-  .keypad-card{background:var(--card);border-radius:18px;padding:14px;box-shadow:var(--shadow);}
-  .keypad{
-    display:grid;
-    grid-template-columns:repeat(3,1fr) 64px;
-    grid-template-rows:repeat(4,50px);
-    gap:8px;
-  }
-  .key{
-    border:none;border-radius:11px;background:var(--key);
-    font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600;color:var(--ink);
-    cursor:pointer;display:flex;align-items:center;justify-content:center;
-  }
-  .key:active{background:#EAE4D2;}
-  .key.fn{background:#EAE4D2;color:var(--ink-soft);}
-  .key.fn svg{width:18px;height:18px;}
-  .key.ok{grid-row:span 2;background:var(--gold-deep);color:#fff;font-family:'Inter',sans-serif;font-weight:700;font-size:15px;}
-  .key.ok:active{background:var(--teal-deep);}
-  .key.ok:disabled{opacity:0.45;}
-
-  /* ── Entries: grouped by day ── */
-  .day-group{margin-bottom:14px;}
-  .day-head{display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 8px;}
-  .day-head .dl{font-size:12.5px;font-weight:700;color:var(--ink);}
-  .day-head .dw{font-size:11px;color:var(--ink-soft);margin-left:6px;font-weight:500;}
-  .day-head .dt{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;color:var(--ink);}
-  .entry{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:14px;padding:11px 12px;margin-bottom:7px;box-shadow:var(--shadow);}
-  .entry-icon{width:36px;height:36px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
-  .entry-icon svg{width:17px;height:17px;}
-  .entry-left{min-width:0;flex:1;}
-  .entry-cat{font-size:14px;font-weight:600;}
-  .entry-meta{font-size:11.5px;color:var(--ink-soft);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .entry-right{display:flex;align-items:center;gap:2px;flex-shrink:0;}
-  .entry-amount{font-family:'IBM Plex Mono',monospace;font-size:14.5px;font-weight:600;color:var(--ink);}
-  .entry-del{background:none;border:none;color:#C7BFA9;cursor:pointer;width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:9px;}
-  .entry-del:active{background:var(--rust-wash);color:var(--rust);}
-  .entry-del svg{width:15px;height:15px;}
-
-  .empty-state{text-align:center;color:var(--ink-soft);padding:52px 20px;font-size:14px;}
-  .empty-state svg{width:44px;height:44px;color:#D6CDB3;margin-bottom:12px;}
-  .empty-state .big{font-family:'Fraunces',serif;font-size:17px;color:var(--ink);margin-bottom:4px;font-weight:600;}
-
-  /* ── Budget envelopes ── */
-  .budget-row{background:var(--card);border-radius:14px;padding:13px 14px;margin-bottom:8px;box-shadow:var(--shadow);cursor:pointer;}
-  .budget-top{display:flex;align-items:center;gap:11px;margin-bottom:9px;}
-  .budget-icon{width:34px;height:34px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
-  .budget-icon svg{width:16px;height:16px;}
-  .budget-name{flex:1;font-size:14px;font-weight:600;}
-  .budget-nums{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink-soft);white-space:nowrap;}
-  .budget-nums b{color:var(--ink);font-weight:600;}
-  .budget-nums.over b{color:var(--rust);}
-  .budget-bar-track{height:7px;border-radius:4px;background:var(--paper-line);overflow:hidden;}
-  .budget-bar-fill{height:100%;border-radius:4px;background:var(--gold-deep);}
-  .budget-bar-fill.over{background:var(--rust);}
-  .budget-unset{font-size:12px;color:var(--ink-soft);text-decoration:underline;text-underline-offset:2px;}
-
-  /* ── Stats ── */
-  .stat-card{background:var(--card);border-radius:16px;padding:20px 18px;margin-bottom:14px;box-shadow:var(--shadow);}
-  .stat-card h2{font-family:'Fraunces',serif;font-weight:600;font-size:15px;margin:0 0 14px;color:var(--ink-soft);}
-  .hero-total-row{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;}
-  .total-figure{font-family:'Fraunces',serif;font-size:36px;font-weight:600;color:var(--ink);letter-spacing:-0.01em;}
-  .total-label{font-size:12.5px;color:var(--ink-soft);margin-top:4px;}
-  canvas{max-width:100%;}
-  .legend-row{display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 0;}
-  .legend-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
-  .legend-name{flex:1;}
-  .legend-pct{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);width:44px;text-align:right;}
-  .legend-val{font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--ink);width:66px;text-align:right;}
-
-  .toast{
-    position:fixed;bottom:calc(20px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(6px);
-    display:flex;align-items:center;gap:8px;background:var(--ink);color:#fff;padding:11px 18px;border-radius:24px;
-    font-size:13.5px;font-weight:500;box-shadow:var(--shadow-lg);
-    opacity:0;pointer-events:none;transition:opacity 0.22s, transform 0.22s;max-width:88vw;
-  }
-  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-  .toast svg{width:15px;height:15px;flex-shrink:0;}
+/* Layout: single column ledger — entry form, month summary with six-category bars, day-grouped list */
+:root{
+  --bg:#f3f4f1; --surface:#ffffff; --fg:#1d2420; --muted:#6a736d; --line:#dfe3de; --accent:#2f5d50;
+  --c-food:#c0623b; --c-cloth:#8a5a9e; --c-home:#3f6f9a; --c-move:#4f8a5b; --c-edu:#b38a1e; --c-fun:#c24868;
+  --danger:#b3412f;
+  --f-display:"Noto Serif TC","Songti TC",serif;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141917; --surface:#1d2421; --fg:#e7ece8; --muted:#94a09a; --line:#2c3531; --accent:#7fbfa9;
+  --c-food:#e08a63; --c-cloth:#b98ccc; --c-home:#79a6d1; --c-move:#82bb8d; --c-edu:#d9b44c; --c-fun:#e57a95;
+  --danger:#e57b6a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141917; --surface:#1d2421; --fg:#e7ece8; --muted:#94a09a; --line:#2c3531; --accent:#7fbfa9;
+  --c-food:#e08a63; --c-cloth:#b98ccc; --c-home:#79a6d1; --c-move:#82bb8d; --c-edu:#d9b44c; --c-fun:#e57a95;
+  --danger:#e57b6a; color-scheme:dark}
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:var(--bg)}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--f-display);font-weight:900;font-size:1.6rem;margin:0;letter-spacing:.04em}
+.sync{font-size:.78rem;color:var(--muted)}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
+label.lbl{font-size:.75rem;color:var(--muted);letter-spacing:.08em;display:block;margin-bottom:6px}
+.amount{display:flex;align-items:center;gap:6px;border-bottom:2px solid var(--line);padding-bottom:4px}
+.amount span{font-family:var(--f-num);font-size:1.6rem;color:var(--muted)}
+.amount input{border:0;background:transparent;color:var(--fg);font-family:var(--f-num);font-size:2rem;width:100%;min-width:0;outline:none}
+.amount:focus-within{border-color:var(--accent)}
+.cats{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:14px}
+.cat{appearance:none;border:1.5px solid var(--line);background:transparent;color:var(--fg);border-radius:10px;padding:8px 0 6px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:0;font-family:var(--f-body)}
+.cat b{font-family:var(--f-display);font-weight:900;font-size:1.45rem;line-height:1.2;color:var(--k)}
+.cat small{font-size:.66rem;color:var(--muted)}
+.cat[aria-pressed="true"]{background:var(--k);border-color:var(--k)}
+.cat[aria-pressed="true"] b,.cat[aria-pressed="true"] small{color:var(--surface)}
+.cat:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row2{display:grid;grid-template-columns:auto 1fr;gap:10px;margin-top:14px}
+.row2 input,.month select{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0;width:100%}
+.submit{margin-top:14px;width:100%;border:0;border-radius:10px;padding:12px;background:var(--accent);color:var(--surface);font:700 1rem var(--f-body);letter-spacing:.2em;cursor:pointer}
+.submit:disabled{opacity:.45;cursor:default}
+.msg{min-height:1.2em;font-size:.8rem;color:var(--muted);margin-top:8px}
+.month{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.month button{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;width:36px;height:36px;font-size:1rem;cursor:pointer}
+.month .mid{text-align:center;flex:1}
+.month .mid .ym{font-family:var(--f-display);font-weight:600;font-size:1.05rem}
+.total{font-size:2.1rem;line-height:1.1}
+.bars{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+.bar{display:grid;grid-template-columns:2rem 1fr auto;align-items:center;gap:10px;cursor:pointer;border:0;background:none;color:inherit;padding:0;font:inherit;text-align:left}
+.bar b{font-family:var(--f-display);font-weight:900;font-size:1.15rem;color:var(--k)}
+.track{height:10px;background:var(--bg);border-radius:5px;overflow:hidden}
+.fill{height:100%;background:var(--k);border-radius:5px;transition:width .35s ease}
+.bar .v{font-size:.85rem;min-width:7.5rem;text-align:right}
+.bar .v i{font-style:normal;color:var(--muted);font-size:.75rem;margin-left:6px}
+.bar[aria-pressed="true"] .track{outline:1.5px solid var(--k);outline-offset:2px}
+.filterNote{font-size:.8rem;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.filterNote button{border:0;background:none;color:var(--accent);font:inherit;cursor:pointer;padding:0}
+.day{display:flex;flex-direction:column}
+.dayhead{display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted);padding:10px 2px 4px;border-bottom:1px solid var(--line);letter-spacing:.05em}
+.item{display:grid;grid-template-columns:2.2rem 1fr auto auto;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line)}
+.item .g{width:2.2rem;height:2.2rem;border-radius:8px;background:color-mix(in srgb,var(--k) 16%,transparent);color:var(--k);display:grid;place-items:center;font-family:var(--f-display);font-weight:900;font-size:1.1rem}
+.item .note{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .note small{display:block;color:var(--muted);font-size:.72rem}
+.item .del{border:0;background:none;color:var(--muted);cursor:pointer;font-size:.78rem;padding:4px}
+.item .del.confirm{color:var(--danger);font-weight:700}
+.empty{text-align:center;color:var(--muted);padding:28px 8px;font-size:.9rem}
+.empty b{display:block;font-family:var(--f-display);font-size:1.6rem;letter-spacing:.3em;color:var(--fg);margin-bottom:6px}
+.foot{display:flex;justify-content:flex-end}
+.foot button{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:8px;padding:6px 12px;font:inherit;font-size:.8rem;cursor:pointer}
+@media (max-width:380px){.cats{grid-template-columns:repeat(3,1fr)}.bar .v{min-width:6rem}}
+@media (prefers-reduced-motion:reduce){.fill{transition:none}}
+.foot{gap:8px;flex-wrap:wrap}
 </style>
 </head>
 <body>
 <div class="wrap">
-
-  <header class="top">
-    <div class="brand">
-      <div class="brand-mark">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M4 4h16v16H4z" stroke="#12261C" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 9h8M8 13h8M8 17h5" stroke="#12261C" stroke-width="1.6" stroke-linecap="round"/></svg>
-      </div>
-      <div class="brand-text">
-        <h1>Ledger</h1>
-        <p>Shared expenses</p>
-      </div>
-    </div>
-    <button class="user-chip" id="userChip" onclick="promptUser()">···</button>
+  <header>
+    <h1>食衣住行育樂</h1>
+    <span class="sync" id="sync">連線中…</span>
   </header>
 
-  <div class="summary-strip" id="summaryStrip">
-    <div>
-      <div class="figure" id="stripTotal">$0.00</div>
-      <div class="figure-label" id="stripLabel">This month</div>
+  <form class="panel" id="form" autocomplete="off">
+    <label class="lbl" for="amt">金額</label>
+    <div class="amount"><span>$</span><input id="amt" inputmode="decimal" placeholder="0.00" aria-label="金額"></div>
+    <div class="cats" id="cats" role="group" aria-label="分類"></div>
+    <div class="row2">
+      <input type="date" id="date" aria-label="日期">
+      <input id="note" placeholder="備註（例：Costco、加油）" maxlength="60" aria-label="備註">
     </div>
-    <div class="delta-badge" id="stripDelta" style="display:none;"></div>
+    <button class="submit" id="submit" type="submit" disabled>記一筆</button>
+    <div class="msg" id="msg"></div>
+  </form>
+
+  <section class="panel">
+    <div class="month">
+      <button id="prev" aria-label="上個月">‹</button>
+      <div class="mid">
+        <div class="ym" id="ym"></div>
+        <div class="total num" id="total">$0</div>
+      </div>
+      <button id="next" aria-label="下個月">›</button>
+    </div>
+    <div class="bars" id="bars"></div>
+  </section>
+
+  <section>
+    <div class="filterNote" id="filterNote" hidden><span id="filterText"></span><button id="clearFilter">顯示全部</button></div>
+    <div id="list"></div>
+  </section>
+
+  <div class="foot">
+    <button id="csv" hidden>匯出本月 CSV</button>
+    <button id="backup">備份全部（JSON）</button>
+    <button id="restoreBtn">匯入備份</button>
+    <input type="file" id="restore" accept=".json,application/json" hidden>
   </div>
-
-  <div class="tabs">
-    <button class="tab active" data-view="add">Add</button>
-    <button class="tab" data-view="entries">Entries</button>
-    <button class="tab" data-view="budget">Budget</button>
-    <button class="tab" data-view="stats">Stats</button>
-  </div>
-
-  <!-- ADD -->
-  <section class="view active" id="view-add">
-
-    <div class="cat-card">
-      <div class="cat-grid" id="catGrid"></div>
-    </div>
-
-    <div class="preview-row">
-      <div class="preview-icon" id="previewIcon"></div>
-      <div class="preview-mid">
-        <div class="preview-cat" id="previewCat">Food</div>
-        <input class="preview-note-input" id="fNote" placeholder="Add a note (optional)">
-      </div>
-      <div class="preview-amount" id="previewAmount">$0.00</div>
-    </div>
-
-    <div class="date-nav">
-      <button class="arrow" onclick="shiftDate(-1)" aria-label="Previous day">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <label class="date-label">
-        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M3 9h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-        <span id="dateLabel">Today</span>
-        <input type="date" id="fDate" onchange="onDatePicked()">
-      </label>
-      <button class="arrow" onclick="shiftDate(1)" aria-label="Next day">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-    </div>
-
-    <div class="keypad-card">
-      <div class="keypad">
-        <button class="key" data-k="7">7</button>
-        <button class="key" data-k="8">8</button>
-        <button class="key" data-k="9">9</button>
-        <button class="key fn" data-k="back" aria-label="Backspace">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M9 6L3 12l6 6h10a2 2 0 002-2V8a2 2 0 00-2-2H9z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10l4 4m0-4l-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-        </button>
-
-        <button class="key" data-k="4">4</button>
-        <button class="key" data-k="5">5</button>
-        <button class="key" data-k="6">6</button>
-        <button class="key fn" data-k="clear">AC</button>
-
-        <button class="key" data-k="1">1</button>
-        <button class="key" data-k="2">2</button>
-        <button class="key" data-k="3">3</button>
-        <button class="key ok" id="submitBtn" data-k="ok" style="grid-row:span 2;">Add</button>
-
-        <button class="key" data-k=".">.</button>
-        <button class="key" data-k="0">0</button>
-        <button class="key" data-k="00">00</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ENTRIES -->
-  <section class="view" id="view-entries">
-    <div id="entriesList"></div>
-  </section>
-
-  <!-- BUDGET -->
-  <section class="view" id="view-budget">
-    <div id="budgetList"></div>
-  </section>
-
-  <!-- STATS -->
-  <section class="view" id="view-stats">
-    <div class="stat-card">
-      <h2>This month</h2>
-      <div class="hero-total-row">
-        <div>
-          <div class="total-figure" id="statMonthTotal">$0.00</div>
-          <div class="total-label" id="statMonthLabel">—</div>
-        </div>
-        <div class="delta-badge" id="statDelta" style="display:none;"></div>
-      </div>
-    </div>
-    <div class="stat-card">
-      <h2>Last 6 months</h2>
-      <canvas id="trendChart" height="180"></canvas>
-    </div>
-    <div class="stat-card">
-      <h2>By category</h2>
-      <canvas id="categoryChart" height="200"></canvas>
-      <div id="categoryLegend" style="margin-top:14px;"></div>
-    </div>
-  </section>
-
-  <div class="toast" id="toast"></div>
 </div>
 
 <script>
-// ── Configuration ──────────────────────────────────────────────────────
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbybGvQJIm95IqiEEPidn08sIXifZ2kIGZFo3hyeZVt_yhXHM5W-R2IHEXWoOADmDYJrEw/exec';
+const CATS=[
+  {k:"food",g:"食",n:"飲食",c:"--c-food"},
+  {k:"cloth",g:"衣",n:"服飾",c:"--c-cloth"},
+  {k:"home",g:"住",n:"居住",c:"--c-home"},
+  {k:"move",g:"行",n:"交通",c:"--c-move"},
+  {k:"edu",g:"育",n:"教育",c:"--c-edu"},
+  {k:"fun",g:"樂",n:"娛樂",c:"--c-fun"}];
+const CAT=Object.fromEntries(CATS.map(c=>[c.k,c]));
+const $=id=>document.getElementById(id);
+const fmt=n=>"$"+n.toLocaleString("en-US",{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2});
+const pad=n=>String(n).padStart(2,"0");
+const today=()=>{const d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())};
 
-const CATEGORIES = [
-  { name: 'Food',          color: '#2A6F6F', icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M8 2v8m4-8v8m4-8v8m-8 0a4 4 0 008 0M12 10v12" stroke="white" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
-  { name: 'Drink',         color: '#3E8FB0', icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M6 8h12l-1.2 11a2 2 0 01-2 1.8H9.2a2 2 0 01-2-1.8L6 8z" stroke="white" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 4l1 4M15 4l-1 4M12 3v5" stroke="white" stroke-width="1.7" stroke-linecap="round"/></svg>' },
-  { name: 'Groceries',     color: '#5B7DB1', icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M3 4h2l2.4 12.4a2 2 0 002 1.6h7.2a2 2 0 002-1.9L20 8H6" stroke="white" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="21" r="1.4" fill="white"/><circle cx="17" cy="21" r="1.4" fill="white"/></svg>' },
-  { name: 'Transport',     color: '#C79A3B', icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 16l1.5-5.5A2 2 0 017.4 9h9.2a2 2 0 011.9 1.5L20 16" stroke="white" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="16" width="18" height="4" rx="1.5" stroke="white" stroke-width="1.7"/><circle cx="7.5" cy="20" r="1.3" fill="white"/><circle cx="16.5" cy="20" r="1.3" fill="white"/></svg>' },
-  { name: 'Housing',       color: '#8A5B9A', icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 11l8-7 8 7M6 10v9a1 1 0 001 1h10a1 1 0 001-1v-9" stroke="white" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
-  { name: 'Utilities',     color: '#6B8E4E', icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="white"/></svg>' },
-  { name: 'Health',        color: '#D8654A', icon: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="white" stroke-width="1.7"/><path d="M12 8v8M8 12h8" stroke="white" stroke-width="1.9" stroke-linecap="round"/></svg>' },
-  { name: 'Shopping',      color: '#B15B7C', icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M6 8h12l-1 12a1 1 0 01-1 1H8a1 1 0 01-1-1L6 8z" stroke="white" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 8V6a3 3 0 016 0v2" stroke="white" stroke-width="1.7" stroke-linecap="round"/></svg>' },
-  { name: 'Entertainment', color: '#4E8E8E', icon: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="12" rx="2" stroke="white" stroke-width="1.7"/><path d="M9 21h6M12 17v4" stroke="white" stroke-width="1.7" stroke-linecap="round"/><path d="M10 9.3v3.4l3-1.7-3-1.7z" fill="white"/></svg>' },
-  { name: 'Kids',          color: '#8E7A4E', icon: '<svg viewBox="0 0 24 24" fill="none"><path d="M12 3l2.6 5.6L21 9.3l-4.5 4.2L17.6 20 12 16.8 6.4 20l1.1-6.5L3 9.3l6.4-.7L12 3z" fill="white"/></svg>' },
-  { name: 'Other',         color: '#7A6B8E', icon: '<svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="1.6" fill="white"/><circle cx="12" cy="6" r="1.6" fill="white"/><circle cx="18" cy="6" r="1.6" fill="white"/><circle cx="6" cy="12" r="1.6" fill="white"/><circle cx="12" cy="12" r="1.6" fill="white"/><circle cx="18" cy="12" r="1.6" fill="white"/><circle cx="6" cy="18" r="1.6" fill="white"/><circle cx="12" cy="18" r="1.6" fill="white"/><circle cx="18" cy="18" r="1.6" fill="white"/></svg>' }
-];
-const catMap = Object.fromEntries(CATEGORIES.map(c => [c.name, c]));
-const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m-8 0h10l-1 13a1 1 0 01-1 1H8a1 1 0 01-1-1L6 7z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.7"/><path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const CHECK_MARK = '<svg viewBox="0 0 24 24" fill="none"><path d="M6 12.5l4 4L18 8" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+let items=[];          // {id,amount,cat,date,note,ts}
+let selCat=null, filterCat=null, pendingDel=null;
+let view=new Date(); view.setDate(1);
+let col=null, local=false, downloads=null;
 
-// ── State ──────────────────────────────────────────────────────────────
-let expenses = [];
-let budgets = {};
-let selectedCategory = CATEGORIES[0].name;
-let selectedDate = new Date();
-let amountBuffer = '';
-let trendChart, categoryChart;
+// ---- category chips
+$("cats").innerHTML=CATS.map(c=>`<button type="button" class="cat" data-k="${c.k}" aria-pressed="false" style="--k:var(${c.c})"><b>${c.g}</b><small>${c.n}</small></button>`).join("");
+$("cats").addEventListener("click",e=>{const b=e.target.closest(".cat");if(!b)return;selCat=b.dataset.k;
+  document.querySelectorAll(".cat").forEach(x=>x.setAttribute("aria-pressed",x===b));validate()});
+$("date").value=today();
+const parseAmt=()=>{const v=parseFloat($("amt").value.replace(/[^0-9.]/g,""));return isFinite(v)&&v>0?Math.round(v*100)/100:0};
+function validate(){$("submit").disabled=!(parseAmt()&&selCat&&$("date").value)}
+$("amt").addEventListener("input",validate);$("date").addEventListener("input",validate);
 
-// ── Init ───────────────────────────────────────────────────────────────
-renderCatGrid();
-updatePreview();
-updateDateLabel();
-initUser();
-loadExpenses();
-bindKeypad();
-
-document.querySelectorAll('.tab').forEach(btn => {
-  btn.addEventListener('click', () => switchView(btn.dataset.view));
+$("form").addEventListener("submit",async e=>{
+  e.preventDefault(); const amount=parseAmt(); if(!amount||!selCat)return;
+  const rec={amount,cat:selCat,date:$("date").value,note:$("note").value.trim(),ts:Date.now()};
+  $("submit").disabled=true;
+  try{
+    if(col){await col.add(rec)}else{rec.id="l"+rec.ts;items.push(rec);saveLocal();render()}
+    $("msg").textContent=`已記錄 ${CAT[rec.cat].g} ${fmt(amount)}`;
+    $("amt").value="";$("note").value="";
+    const d=new Date(rec.date+"T00:00");if(d.getMonth()!==view.getMonth()||d.getFullYear()!==view.getFullYear()){view=new Date(d.getFullYear(),d.getMonth(),1);render()}
+  }catch(err){$("msg").textContent=err&&err.code==="quota_exceeded"?"儲存空間已滿，請刪除舊紀錄後再試。":"沒有存到，請檢查網路後再按一次。"}
+  validate(); $("amt").focus();
 });
 
-function switchView(view) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
-  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
-  if (view === 'stats') renderStats();
-  if (view === 'budget') renderBudget();
+// ---- month nav
+$("prev").onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()-1,1);filterCat=null;render()};
+$("next").onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()+1,1);filterCat=null;render()};
+$("clearFilter").onclick=()=>{filterCat=null;render()};
+$("bars").addEventListener("click",e=>{const b=e.target.closest(".bar");if(!b)return;filterCat=filterCat===b.dataset.k?null:b.dataset.k;render()});
+
+function monthItems(){const key=view.getFullYear()+"-"+pad(view.getMonth()+1);return items.filter(i=>i.date&&i.date.startsWith(key))}
+
+function render(){
+  $("ym").textContent=`${view.getFullYear()} 年 ${view.getMonth()+1} 月`;
+  const m=monthItems(); const total=m.reduce((s,i)=>s+i.amount,0);
+  $("total").textContent=fmt(total);
+  const sums=Object.fromEntries(CATS.map(c=>[c.k,0])); m.forEach(i=>{if(sums[i.cat]!=null)sums[i.cat]+=i.amount});
+  const max=Math.max(...Object.values(sums),1);
+  $("bars").innerHTML=CATS.map(c=>{const v=sums[c.k],p=total?Math.round(v/total*100):0;
+    return `<button class="bar" data-k="${c.k}" aria-pressed="${filterCat===c.k}" style="--k:var(${c.c})" aria-label="${c.n} ${fmt(v)}">
+      <b>${c.g}</b><div class="track"><div class="fill" style="width:${v/max*100}%"></div></div>
+      <span class="v num">${fmt(v)}<i>${p}%</i></span></button>`}).join("");
+  $("filterNote").hidden=!filterCat;
+  if(filterCat)$("filterText").textContent=`只看「${CAT[filterCat].g}・${CAT[filterCat].n}」`;
+  const shown=m.filter(i=>!filterCat||i.cat===filterCat).sort((a,b)=>b.date.localeCompare(a.date)||b.ts-a.ts);
+  $("csv").hidden=!(downloads&&m.length);
+  if(!shown.length){
+    $("list").innerHTML=`<div class="empty"><b>${filterCat?CAT[filterCat].g:"食衣住行育樂"}</b>${items.length?"這個月還沒有紀錄。":"還沒有任何紀錄。在上面輸入金額、選一個分類，按「記一筆」就開始。"}</div>`;return}
+  const byDay={}; shown.forEach(i=>(byDay[i.date]=byDay[i.date]||[]).push(i));
+  const wk="日一二三四五六";
+  $("list").innerHTML=Object.keys(byDay).map(d=>{const dt=new Date(d+"T00:00"),ds=byDay[d].reduce((s,i)=>s+i.amount,0);
+    return `<div class="day"><div class="dayhead"><span>${dt.getMonth()+1}/${dt.getDate()}（${wk[dt.getDay()]}）</span><span class="num">${fmt(ds)}</span></div>`+
+    byDay[d].map(i=>{const c=CAT[i.cat]||CATS[0];return `<div class="item" style="--k:var(${c.c})"><div class="g">${c.g}</div>
+      <div class="note">${esc(i.note)||c.n}<small>${c.n}</small></div><span class="num">${fmt(i.amount)}</span>
+      <button class="del${pendingDel===i.id?" confirm":""}" data-id="${i.id}">${pendingDel===i.id?"確定刪除":"刪除"}</button></div>`}).join("")+`</div>`}).join("");
 }
+function esc(s){return (s||"").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]))}
 
-// ── Category picker ────────────────────────────────────────────────────
-function renderCatGrid() {
-  const grid = document.getElementById('catGrid');
-  grid.innerHTML = CATEGORIES.map(c => `
-    <button type="button" class="cat-tile ${c.name === selectedCategory ? 'active' : ''}" data-cat="${c.name}">
-      <span class="sq" style="background:${c.color};">${c.icon}<span class="check">${CHECK_MARK}</span></span>
-      <span class="lb">${c.name}</span>
-    </button>`).join('');
-  grid.querySelectorAll('.cat-tile').forEach(el => {
-    el.addEventListener('click', () => {
-      selectedCategory = el.dataset.cat;
-      grid.querySelectorAll('.cat-tile').forEach(p => p.classList.toggle('active', p.dataset.cat === selectedCategory));
-      updatePreview();
-    });
-  });
-}
+$("list").addEventListener("click",async e=>{const b=e.target.closest(".del");if(!b)return;const id=b.dataset.id;
+  if(pendingDel!==id){pendingDel=id;render();setTimeout(()=>{if(pendingDel===id){pendingDel=null;render()}},3000);return}
+  pendingDel=null;
+  try{if(col){await col.doc(id).delete()}else{items=items.filter(i=>i.id!==id);saveLocal();render()}}catch{$("msg").textContent="刪除失敗，請再試一次。"}
+});
 
-function updatePreview() {
-  const c = catMap[selectedCategory];
-  document.getElementById('previewIcon').style.background = c.color;
-  document.getElementById('previewIcon').innerHTML = c.icon;
-  document.getElementById('previewCat').textContent = c.name;
-  document.getElementById('previewAmount').textContent = '$' + (amountBuffer === '' ? '0.00' : formatBuffer(amountBuffer));
-}
+$("csv").onclick=async()=>{const m=monthItems().sort((a,b)=>a.date.localeCompare(b.date));
+  const rows=[["日期","分類","類別","金額","備註"],...m.map(i=>[i.date,CAT[i.cat].g,CAT[i.cat].n,i.amount,i.note])];
+  const csv="﻿"+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+  saveFile(`expenses-${view.getFullYear()}-${pad(view.getMonth()+1)}.csv`,new Blob([csv],{type:"text/csv"}))};
 
-function formatBuffer(buf) {
-  const n = parseFloat(buf);
-  return isNaN(n) ? '0.00' : n.toFixed(buf.includes('.') && buf.endsWith('.') ? 0 : 2).replace(/\.00$/, buf.includes('.') ? '.00' : '.00');
-}
+function saveFile(name,blob){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 
-// ── Keypad ─────────────────────────────────────────────────────────────
-function bindKeypad() {
-  document.querySelectorAll('.key').forEach(btn => {
-    btn.addEventListener('click', () => handleKey(btn.dataset.k));
-  });
-}
-function handleKey(k) {
-  if (k === 'ok') { addExpense(); return; }
-  if (k === 'clear') { amountBuffer = ''; updatePreview(); return; }
-  if (k === 'back') { amountBuffer = amountBuffer.slice(0, -1); updatePreview(); return; }
-  if (k === '.') {
-    if (amountBuffer.includes('.')) return;
-    amountBuffer += (amountBuffer === '' ? '0.' : '.');
-    updatePreview(); return;
-  }
-  if (k === '00') {
-    if (amountBuffer === '') return;
-    amountBuffer += '00';
-    updatePreview(); return;
-  }
-  // digit
-  if (amountBuffer === '0') amountBuffer = k;
-  else amountBuffer += k;
-  updatePreview();
-}
+$("backup").onclick=()=>saveFile(`expenses-backup-${today()}.json`,new Blob([JSON.stringify(items,null,1)],{type:"application/json"}));
+$("restoreBtn").onclick=()=>$("restore").click();
+$("restore").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;
+  try{const data=JSON.parse(await f.text());if(!Array.isArray(data))throw 0;
+    const ids=new Set(items.map(i=>i.id));let added=0;
+    data.forEach(r=>{if(r&&r.id&&!ids.has(r.id)&&CAT[r.cat]&&+r.amount>0&&/^\d{4}-\d{2}-\d{2}$/.test(r.date)){
+      items.push({id:String(r.id),amount:+r.amount,cat:r.cat,date:r.date,note:String(r.note||""),ts:+r.ts||Date.now()});ids.add(r.id);added++}});
+    saveLocal();render();$("msg").textContent=`已匯入 ${added} 筆（重複的已略過）`}
+  catch{$("msg").textContent="這個檔案不是帳本備份，請選擇「備份全部」匯出的 JSON。"}
+  e.target.value=""});
 
-// ── Date nav ───────────────────────────────────────────────────────────
-function shiftDate(days) {
-  selectedDate.setDate(selectedDate.getDate() + days);
-  updateDateLabel();
-}
-function onDatePicked() {
-  const val = document.getElementById('fDate').value;
-  if (val) selectedDate = new Date(val + 'T00:00:00');
-  updateDateLabel();
-}
-function updateDateLabel() {
-  const today = new Date();
-  const isToday = sameDay(selectedDate, today);
-  const y = new Date(today); y.setDate(y.getDate() - 1);
-  const isYesterday = sameDay(selectedDate, y);
-  let label;
-  if (isToday) label = 'Today';
-  else if (isYesterday) label = 'Yesterday';
-  else label = selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  document.getElementById('dateLabel').textContent = label;
-  document.getElementById('fDate').value = toISODate(selectedDate);
-}
-function sameDay(a, b) { return a.toDateString() === b.toDateString(); }
-function toISODate(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+// ---- storage
+function loadLocal(){try{items=JSON.parse(localStorage.getItem("ledger6")||"[]")}catch{items=[]}}
+function saveLocal(){try{localStorage.setItem("ledger6",JSON.stringify(items))}catch{}}
 
-// ── User identity (per device, stored locally) ────────────────────────
-function initUser() {
-  let name = localStorage.getItem('ledger_user');
-  if (!name) name = promptUser(true);
-  updateUserChip();
-}
-function promptUser(silent) {
-  const current = localStorage.getItem('ledger_user') || '';
-  const name = prompt('Your name (shown on entries you add):', current);
-  if (name && name.trim()) {
-    localStorage.setItem('ledger_user', name.trim());
-  } else if (!current && !silent) {
-    return;
-  }
-  updateUserChip();
-  return localStorage.getItem('ledger_user');
-}
-function updateUserChip() {
-  document.getElementById('userChip').textContent = localStorage.getItem('ledger_user') || 'Set name';
-}
-
-// ── Data loading ───────────────────────────────────────────────────────
-async function loadExpenses() {
-  try {
-    const res = await fetch(GAS_URL);
-    const data = await res.json();
-    if (data.success) {
-      expenses = data.expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
-      budgets = Object.fromEntries((data.budgets || []).map(b => [b.category, Number(b.limit)]));
-      renderEntries();
-      renderSummaryStrip();
-    } else {
-      showToast('Failed to load: ' + data.error);
-    }
-  } catch (err) {
-    showToast('Could not reach the ledger');
-  }
-}
-
-// ── Add expense ────────────────────────────────────────────────────────
-async function addExpense() {
-  const amount = parseFloat(amountBuffer);
-  const category = selectedCategory;
-  const date = toISODate(selectedDate);
-  const note = document.getElementById('fNote').value.trim();
-  const user = localStorage.getItem('ledger_user');
-
-  if (!user) { promptUser(); return; }
-  if (!amount || amount <= 0) { showToast('Enter an amount'); return; }
-
-  const btn = document.getElementById('submitBtn');
-  btn.disabled = true;
-  btn.textContent = '…';
-
-  try {
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'add', amount, category, date, note, user })
-    });
-    const data = await res.json();
-    if (data.success) {
-      amountBuffer = '';
-      document.getElementById('fNote').value = '';
-      updatePreview();
-      showToast('Added to the ledger');
-      await loadExpenses();
-      switchView('entries');
-    } else {
-      showToast('Failed: ' + data.error);
-    }
-  } catch (err) {
-    showToast('Network error — try again');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Add';
-  }
-}
-
-// ── Delete expense ─────────────────────────────────────────────────────
-async function deleteExpense(id) {
-  if (!confirm('Delete this entry?')) return;
-  try {
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'delete', id })
-    });
-    const data = await res.json();
-    if (data.success) {
-      showToast('Deleted');
-      await loadExpenses();
-    } else {
-      showToast('Failed: ' + data.error);
-    }
-  } catch (err) {
-    showToast('Network error — try again');
-  }
-}
-
-// ── Render entries list, grouped by day ────────────────────────────────
-function renderEntries() {
-  const el = document.getElementById('entriesList');
-  if (expenses.length === 0) {
-    el.innerHTML = `
-      <div class="empty-state">
-        ${TRASH_ICON.replace('currentColor','#D6CDB3')}
-        <div class="big">No entries yet</div>
-        <div>Add your first expense to get started</div>
-      </div>`;
-    return;
-  }
-  const groups = {};
-  expenses.forEach(exp => { (groups[exp.date] = groups[exp.date] || []).push(exp); });
-  const dayKeys = Object.keys(groups).sort((a, b) => new Date(b) - new Date(a));
-
-  let html = '';
-  dayKeys.forEach(dateKey => {
-    const items = groups[dateKey];
-    const d = new Date(dateKey + 'T00:00:00');
-    const today = new Date();
-    const y = new Date(today); y.setDate(y.getDate() - 1);
-    let dl;
-    if (sameDay(d, today)) dl = 'Today';
-    else if (sameDay(d, y)) dl = 'Yesterday';
-    else dl = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const dw = d.toLocaleDateString('en-US', { weekday: 'long' });
-    const dayTotal = items.reduce((s, e) => s + Number(e.amount), 0);
-
-    html += `<div class="day-group"><div class="day-head"><div><span class="dl">${dl}</span><span class="dw">${dw}</span></div><div class="dt">-$${dayTotal.toFixed(2)}</div></div>`;
-    items.forEach(exp => {
-      const cat = catMap[exp.category] || { icon: CHECK_MARK, color: '#7A6B8E' };
-      html += `
-        <div class="entry">
-          <div class="entry-icon" style="background:${cat.color};">${cat.icon}</div>
-          <div class="entry-left">
-            <div class="entry-cat">${escapeHtml(exp.category)}</div>
-            <div class="entry-meta">${escapeHtml(exp.user)}${exp.note ? ' · ' + escapeHtml(exp.note) : ''}</div>
-          </div>
-          <div class="entry-right">
-            <div class="entry-amount">-$${Number(exp.amount).toFixed(2)}</div>
-            <button class="entry-del" onclick="deleteExpense('${exp.id}')" aria-label="Delete">${TRASH_ICON}</button>
-          </div>
-        </div>`;
-    });
-    html += `</div>`;
-  });
-  el.innerHTML = html;
-}
-
-function escapeHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = s || '';
-  return d.innerHTML;
-}
-
-// ── Month helpers ──────────────────────────────────────────────────────
-function monthKeyOf(date, offset) {
-  const d = new Date(date.getFullYear(), date.getMonth() - offset, 1);
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-}
-function totalFor(monthKey) {
-  return expenses.filter(e => e.date.startsWith(monthKey)).reduce((s, e) => s + Number(e.amount), 0);
-}
-function deltaBadge(current, previous) {
-  if (previous === 0) return null;
-  const pct = Math.round(((current - previous) / previous) * 100);
-  const up = pct >= 0;
-  return { text: (up ? '▲ ' : '▼ ') + Math.abs(pct) + '%', cls: up ? 'delta-up' : 'delta-down' };
-}
-
-// ── Summary strip (always visible) ─────────────────────────────────────
-function renderSummaryStrip() {
-  const now = new Date();
-  const thisKey = monthKeyOf(now, 0);
-  const prevKey = monthKeyOf(now, 1);
-  const total = totalFor(thisKey);
-  const prevTotal = totalFor(prevKey);
-  document.getElementById('stripTotal').textContent = '$' + total.toFixed(2);
-  document.getElementById('stripLabel').textContent = now.toLocaleDateString('en-US', { month: 'long' }) + ' total';
-  const badge = document.getElementById('stripDelta');
-  const d = deltaBadge(total, prevTotal);
-  if (d) {
-    badge.style.display = 'inline-block';
-    badge.textContent = d.text;
-    badge.className = 'delta-badge ' + d.cls;
-  } else {
-    badge.style.display = 'none';
-  }
-}
-
-// ── Budget envelopes ───────────────────────────────────────────────────
-function renderBudget() {
-  const now = new Date();
-  const thisKey = monthKeyOf(now, 0);
-  const spentByCat = {};
-  expenses.filter(e => e.date.startsWith(thisKey)).forEach(e => {
-    spentByCat[e.category] = (spentByCat[e.category] || 0) + Number(e.amount);
-  });
-
-  const el = document.getElementById('budgetList');
-  el.innerHTML = CATEGORIES.map(c => {
-    const spent = spentByCat[c.name] || 0;
-    const limit = budgets[c.name] || 0;
-    if (!limit) {
-      return `
-        <div class="budget-row" onclick="editBudget('${c.name}')">
-          <div class="budget-top">
-            <div class="budget-icon" style="background:${c.color};">${c.icon}</div>
-            <div class="budget-name">${c.name}</div>
-            <div class="budget-nums">$${spent.toFixed(2)} · <span class="budget-unset">Set budget</span></div>
-          </div>
-        </div>`;
-    }
-    const pct = Math.min(100, Math.round((spent / limit) * 100));
-    const over = spent > limit;
-    return `
-      <div class="budget-row" onclick="editBudget('${c.name}')">
-        <div class="budget-top">
-          <div class="budget-icon" style="background:${c.color};">${c.icon}</div>
-          <div class="budget-name">${c.name}</div>
-          <div class="budget-nums ${over ? 'over' : ''}"><b>$${spent.toFixed(2)}</b> / $${limit.toFixed(2)}</div>
-        </div>
-        <div class="budget-bar-track"><div class="budget-bar-fill ${over ? 'over' : ''}" style="width:${pct}%;"></div></div>
-      </div>`;
-  }).join('');
-}
-
-async function editBudget(category) {
-  const current = budgets[category] || '';
-  const input = prompt('Monthly budget for ' + category + ':', current);
-  if (input === null) return;
-  const limit = parseFloat(input);
-  if (isNaN(limit) || limit < 0) { showToast('Enter a valid amount'); return; }
-  try {
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'setBudget', category, limit })
-    });
-    const data = await res.json();
-    if (data.success) {
-      budgets[category] = limit;
-      renderBudget();
-      showToast('Budget updated');
-    } else {
-      showToast('Failed: ' + data.error);
-    }
-  } catch (err) {
-    showToast('Network error — try again');
-  }
-}
-
-// ── Stats ──────────────────────────────────────────────────────────────
-function renderStats() {
-  const now = new Date();
-  const thisKey = monthKeyOf(now, 0);
-  const prevKey = monthKeyOf(now, 1);
-  const thisMonthExpenses = expenses.filter(e => e.date.startsWith(thisKey));
-  const monthTotal = totalFor(thisKey);
-  const prevTotal = totalFor(prevKey);
-
-  document.getElementById('statMonthTotal').textContent = '$' + monthTotal.toFixed(2);
-  document.getElementById('statMonthLabel').textContent = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) + ' · ' + thisMonthExpenses.length + ' entries';
-  const badge = document.getElementById('statDelta');
-  const d = deltaBadge(monthTotal, prevTotal);
-  if (d) {
-    badge.style.display = 'inline-block';
-    badge.textContent = d.text + ' vs last mo.';
-    badge.className = 'delta-badge ' + d.cls;
-  } else {
-    badge.style.display = 'none';
-  }
-
-  const months = [];
-  for (let i = 5; i >= 0; i--) {
-    const dd = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push({ key: monthKeyOf(now, i), label: dd.toLocaleDateString('en-US', { month: 'short' }) });
-  }
-  const trendData = months.map(m => totalFor(m.key));
-
-  const trendCtx = document.getElementById('trendChart').getContext('2d');
-  if (trendChart) trendChart.destroy();
-  trendChart = new Chart(trendCtx, {
-    type: 'bar',
-    data: { labels: months.map(m => m.label), datasets: [{ data: trendData, backgroundColor: '#3E9B72', borderRadius: 6, maxBarThickness: 34 }] },
-    options: {
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { beginAtZero: true, ticks: { callback: v => '$' + v, font: { family: 'IBM Plex Mono', size: 11 } }, grid: { color: '#EFE9D8' } },
-        x: { ticks: { font: { family: 'Inter', size: 12 } }, grid: { display: false } }
-      }
-    }
-  });
-
-  const catTotals = {};
-  thisMonthExpenses.forEach(e => { catTotals[e.category] = (catTotals[e.category] || 0) + Number(e.amount); });
-  const sortedCats = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
-  const catLabels = sortedCats.map(c => c[0]);
-  const catData = sortedCats.map(c => c[1]);
-  const catColors = catLabels.map(l => (catMap[l] || {}).color || '#7A6B8E');
-
-  const catCtx = document.getElementById('categoryChart').getContext('2d');
-  if (categoryChart) categoryChart.destroy();
-  const legendEl = document.getElementById('categoryLegend');
-  if (catLabels.length === 0) {
-    catCtx.canvas.style.display = 'none';
-    legendEl.innerHTML = '<div class="empty-state" style="padding:10px 0;">Nothing recorded this month yet</div>';
-  } else {
-    catCtx.canvas.style.display = 'block';
-    categoryChart = new Chart(catCtx, {
-      type: 'doughnut',
-      data: { labels: catLabels, datasets: [{ data: catData, backgroundColor: catColors, borderWidth: 0 }] },
-      options: { cutout: '68%', plugins: { legend: { display: false } } }
-    });
-    legendEl.innerHTML = sortedCats.map(([name, val]) => {
-      const c = catMap[name] || { color: '#7A6B8E' };
-      const pct = ((val / monthTotal) * 100).toFixed(1);
-      return `<div class="legend-row"><span class="legend-dot" style="background:${c.color}"></span><span class="legend-name">${name}</span><span class="legend-pct">${pct}%</span><span class="legend-val">$${val.toFixed(2)}</span></div>`;
-    }).join('');
-  }
-}
-
-// ── Toast ──────────────────────────────────────────────────────────────
-let toastTimer;
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.innerHTML = CHECK_ICON + '<span>' + msg + '</span>';
-  t.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
-}
+downloads=true; local=true; loadLocal();
+$("sync").textContent="資料存在此裝置";
+render();
 </script>
 </body>
 </html>
